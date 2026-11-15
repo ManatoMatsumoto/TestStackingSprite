@@ -28,7 +28,7 @@ public static class SpriteStackDemoSceneBuilder
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.16f, 0.22f, 0.18f);
         cam.nearClipPlane = 0.1f;
-        cam.farClipPlane = 50f;
+        cam.farClipPlane = 200f;
         camGo.transform.position = new Vector3(0, 0, -10);
         var orbit = camGo.AddComponent<SpriteStackOrbitCamera>();
         orbit.targetPoint = Vector2.zero;
@@ -39,7 +39,7 @@ public static class SpriteStackDemoSceneBuilder
         var gsr = ground.AddComponent<SpriteRenderer>();
         gsr.sprite = grass;
         gsr.drawMode = SpriteDrawMode.Tiled;
-        gsr.size = new Vector2(26, 26);
+        gsr.size = new Vector2(80, 80); // 傾けたときに奥まで地面が見えるよう広めに
         gsr.sortingOrder = -32700;
 
         // --- Objects ---

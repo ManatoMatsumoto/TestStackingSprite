@@ -5,11 +5,15 @@ using UnityEngine.Rendering;
 /// <summary>
 /// スプライトスタッキング (Sprite Stacking) レンダラー。
 ///
-/// 高さ方向に輪切りにしたスライス画像を、下の層から順に「画面の上方向」へ少しずつずらして
+/// 高さ方向に輪切りにしたスライス画像を、下の層から順に少しずつ高い位置へずらして
 /// 重ね描きすることで、2D スプライトだけで 3D のような立体感を出す。
 ///
+/// ・地面はワールド XY 平面、高さ方向はワールド -Z（カメラ側）
+/// ・StackMode.World3D (既定): 各スライスを実際の高さ (-Z) に水平に置く。
+///   カメラを傾けると地面もスライスも正しく遠近（縦方向の圧縮）がかかり、
+///   積み上げのずれ量も傾きに応じて変わる（真上から見ると上面だけが見える）
+/// ・StackMode.ScreenOffset: 従来の 2D 手法。地面と同一平面で「画面の上方向」へずらすだけ
 /// ・オブジェクトの回転 (Z 軸) は全スライスにそのまま適用される（＝モデルが回る）
-/// ・積み上げ方向は常に「カメラの上方向」なので、カメラを回すと別の角度から見た絵になる
 /// ・オブジェクト同士の前後関係は SortingGroup の sortingOrder を画面上の奥行きから毎フレーム計算
 ///
 /// スライスの指定方法は2通り:
@@ -29,10 +33,21 @@ public class SpriteStack : MonoBehaviour
         Vertical,
     }
 
+    public enum StackMode
+    {
+        /// <summary>スライスを実際の高さ (ワールド -Z) に配置。傾けたカメラで正しい見え方になる</summary>
+        World3D,
+        /// <summary>スライスを地面と同一平面で「画面の上方向」へずらす（真上視点専用の 2D 手法）</summary>
+        ScreenOffset,
+    }
+
     const string SliceNamePrefix = "__Slice_";
 
-    /// <summary>全スタック共通の高さ倍率（カメラの「傾き」の擬似表現としてデモで使用）</summary>
+    /// <summary>全スタック共通の高さ倍率</summary>
     public static float GlobalHeightScale = 1f;
+
+    [Header("Mode")]
+    public StackMode mode = StackMode.World3D;
 
     [Header("Source: Sprite 配列 (設定されていれば優先)")]
     [Tooltip("下の層 → 上の層 の順に並べたスライス")]
@@ -195,14 +210,19 @@ public class SpriteStack : MonoBehaviour
         Vector2 up = ViewUp();
         float scale = Mathf.Abs(transform.lossyScale.y);
         float step = layerHeightPixels * unitsPerPixel * heightScale * GlobalHeightScale * scale;
-        Vector3 offset = new Vector3(up.x, up.y, 0f) * step;
         Vector3 basePos = transform.position;
+
+        // World3D: 実際の高さ方向 (-Z) に積む。見え方（ずれ量・地面の圧縮）はカメラの傾きで決まる
+        // ScreenOffset: 地面と同一平面で画面上方向にずらす
+        Vector3 offset = mode == StackMode.World3D
+            ? Vector3.back * step
+            : new Vector3(up.x, up.y, 0f) * step;
 
         for (int i = 0; i < renderers.Count; i++)
         {
             var sr = renderers[i];
             if (sr == null) { dirty = true; continue; }
-            // 回転はルートから継承（モデルの向き）、位置だけを画面上方向に積み上げる
+            // 回転はルートから継承（モデルの向き・水平のまま）、位置だけを積み上げる
             sr.transform.position = basePos + offset * layerHeights[i];
         }
 
@@ -212,12 +232,15 @@ public class SpriteStack : MonoBehaviour
         sortingGroup.sortingOrder = Mathf.Clamp(order, -32000, 32000);
     }
 
-    /// <summary>メインカメラの「画面上方向」をワールド XY 平面上のベクトルとして返す。</summary>
+    /// <summary>
+    /// メインカメラの「画面上方向（＝地面上で奥へ向かう方向）」をワールド XY 平面上のベクトルとして返す。
+    /// カメラが傾いていても破綻しないよう、up と forward の XY 成分を合成する。
+    /// </summary>
     public static Vector2 ViewUp()
     {
         var cam = Camera.main;
         if (cam == null) return Vector2.up;
-        Vector3 u = cam.transform.up;
+        Vector3 u = cam.transform.up + cam.transform.forward;
         var v = new Vector2(u.x, u.y);
         return v.sqrMagnitude > 1e-6f ? v.normalized : Vector2.up;
     }
